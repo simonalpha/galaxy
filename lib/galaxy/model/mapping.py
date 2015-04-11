@@ -20,6 +20,9 @@ from galaxy.model.custom_types import JSONType, MetadataType, TrimmedString, UUI
 from galaxy.model.base import ModelMapping
 from galaxy.security import GalaxyRBACAgent
 
+from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.dialects.postgresql import HSTORE
+
 log = logging.getLogger( __name__ )
 
 metadata = MetaData()
@@ -415,6 +418,7 @@ model.Job.table = Table( "job", metadata,
     Column( "object_store_id", TrimmedString( 255 ), index=True ),
     Column( "imported", Boolean, default=False, index=True ),
     Column( "params", TrimmedString(255), index=True ),
+    Column( "cached_id", Integer, ForeignKey( "cached_job.id" ) ),
     Column( "handler", TrimmedString( 255 ), index=True ) )
 
 model.JobStateHistory.table = Table( "job_state_history", metadata,
@@ -599,6 +603,20 @@ model.PostJobActionAssociation.table = Table("post_job_action_association", meta
     Column("id", Integer, primary_key=True),
     Column("job_id", Integer, ForeignKey( "job.id" ), index=True, nullable=False),
     Column("post_job_action_id", Integer, ForeignKey( "post_job_action.id" ), index=True, nullable=False))
+
+
+model.CachedJob.table = Table( "cached_job", metadata,
+    Column("id", Integer, primary_key=True ),
+    Column("create_time", DateTime, default=now ),
+    Column("update_time", DateTime, default=now, onupdate=now ),
+    Column("job_id", Integer, ForeignKey( "job.id" ), nullable=False),
+    Column("tool_id", String( 255 ), index=True),
+    Column("tool_version", TEXT, default="1.0.0", index=True),
+    Column("inputs", MutableDict.as_mutable(HSTORE), index=True),
+    Column("outputs", MutableDict.as_mutable(HSTORE)),
+    Column("parameters", MutableDict.as_mutable(HSTORE), index=True),
+    Column("duration", Integer, key="_duration" ),
+    Column("deleted", Boolean, index=True, default=False) )
 
 model.DeferredJob.table = Table( "deferred_job", metadata,
     Column( "id", Integer, primary_key=True ),
@@ -1918,10 +1936,16 @@ mapper( model.Job, model.Job.table,
                      input_library_datasets=relation( model.JobToInputLibraryDatasetAssociation ),
                      output_library_datasets=relation( model.JobToOutputLibraryDatasetAssociation ),
                      external_output_metadata = relation( model.JobExternalOutputMetadata, lazy = False ),
+                     caching_details=relation(model.CachedJob, lazy=False, uselist=False, foreign_keys=[model.Job.table.c.cached_id]),
                      tasks = relation(model.Task) ) )
 
 mapper( model.Task, model.Task.table,
     properties=dict( job = relation( model.Job ) ) )
+
+
+mapper( model.CachedJob, model.CachedJob.table,
+    properties=dict( base_job=relation( model.Job, backref='dependent_cached_job', lazy=False, foreign_keys=[model.CachedJob.table.c.job_id] ),
+                     dependent_jobs=relation( model.Job, lazy=True, foreign_keys=[model.Job.table.c.cached_id]) ) )
 
 mapper( model.DeferredJob, model.DeferredJob.table,
     properties = {} )

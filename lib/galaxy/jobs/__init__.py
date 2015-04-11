@@ -948,6 +948,11 @@ class JobWrapper( object ):
             self.tool.job_failed( self, message, exception )
         delete_files = self.app.config.cleanup_job == 'always' or (self.app.config.cleanup_job == 'onsuccess' and job.state == job.states.DELETED)
         self.cleanup( delete_files=delete_files )
+        # if the job has a dependent CachedJob, delete it to prevent using
+        # failed job data
+        if job.dependent_cached_job:
+            self.sa_session.delete(job.dependent_cached_job)
+            self.sa_session.flush()
 
     def pause( self, job=None, message=None ):
         if job is None:

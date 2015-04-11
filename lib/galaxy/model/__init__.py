@@ -47,6 +47,8 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.expression import func
 from sqlalchemy import not_
 
+from galaxy.util.hstore import hstorify_dict
+
 log = logging.getLogger( __name__ )
 
 datatypes_registry = galaxy.datatypes.registry.Registry()
@@ -576,6 +578,12 @@ class Job( object, HasJobMetrics, Dictifiable ):
         if self.workflow_invocation_step:
             self.workflow_invocation_step.update()
 
+    def is_cached(self):
+        if self.caching_details:
+            return True
+        else:
+            return False
+
 
 class Task( object, HasJobMetrics ):
     """
@@ -904,6 +912,65 @@ class DeferredJob( object ):
             return True
         else:
             return False
+
+
+class CachedJob( object, Dictifiable ):
+    """
+    Represents a 'cached' job, in a easily searchable form, to allow redirection of
+    output data and prevention of superfluous computation.
+    """
+    dict_collection_visible_keys = [ 'id', 'tool', 'state', 'creating_user', 'duration'  ]
+    dict_element_visible_keys = [ 'id', 'tool', 'state', 'inputs', 'outputs', 'parameters', 'creating_user', 'duration', 'deleted'  ]
+
+    def __init__(self, tool_id, tool_version, job=None, inputs=None, outputs=None, parameters=None):
+        self.base_job = job
+        self.tool_id = tool_id
+        self.tool_version = tool_version
+        if inputs is None:
+            self.inputs = {}
+        else:
+            self.inputs = inputs
+        if outputs is None:
+            self.outputs = {}
+        else:
+            self.outputs = outputs
+        if parameters is None:
+            self.parameters = {}
+        else:
+            self.parameters = parameters
+
+    def add_inputs(self, input_dict):
+        self.inputs.update(hstorify_dict(input_dict))
+
+    def add_parameters(self, params_dict):
+        self.parameters.update(hstorify_dict(params_dict))
+
+    def add_outputs(self, output_dict):
+        self.outputs.update(hstorify_dict(output_dict))
+
+    def get_duration(self):
+        if self._duration:
+            return self._duration
+        time_delta = self.base_job.update_time - self.base_job.create_time
+        return time_delta.total_seconds()
+
+    def set_duration(self, value):
+        self._duration = value
+
+    duration = property( get_duration, set_duration )
+
+    @property
+    def state(self):
+        return self.base_job.state
+
+    @property
+    def creating_user(self):
+        return self.base_job.get_user().username
+
+    @property
+    def tool(self):
+        return self.tool_id + '-' + self.tool_version
+
 
 class Group( object, Dictifiable  ):
     dict_collection_visible_keys = ( 'id', 'name' )
@@ -1542,9 +1609,13 @@ class DatasetInstance( object ):
             return self._state
         return self.dataset.state
     def set_dataset_state ( self, state ):
-        self.dataset.state = state
-        object_session( self ).add( self.dataset )
-        object_session( self ).flush() #flush here, because hda.flush() won't flush the Dataset object
+        if self.creating_job and not self.creating_job.is_cached():
+            self._state = None
+            self.dataset.state = state
+            object_session( self ).add( self.dataset )
+            object_session( self ).flush() #flush here, because hda.flush() won't flush the Dataset object
+        else:
+            self._state = state
     state = property( get_dataset_state, set_dataset_state )
     def get_file_name( self ):
         return self.dataset.get_file_name()
@@ -1870,6 +1941,17 @@ class DatasetInstance( object ):
             msg = self.conversion_messages.PENDING
 
         return msg
+
+    def set_instance_state(self, state):
+        """
+        Sets the instance (HDA, LDDA, etc) state without affecting the
+        underlying datasets, allowing manipulation of history item state
+        when sharing datasets, without changing state of all instances
+        linking to the underlying dataset.
+        """
+        # TODO: Check how ext metadata script interacts with this and mimic.
+        self._state = state
+
 
 class HistoryDatasetAssociation( DatasetInstance, Dictifiable, UsesAnnotations, HasName ):
     """
