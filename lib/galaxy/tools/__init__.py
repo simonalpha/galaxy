@@ -672,7 +672,8 @@ class Tool( object, Dictifiable ):
         # Action
         action = tool_source.parse_action_module()
         if action is None:
-            self.tool_action = self.default_tool_action()
+            action = self.app.config.default_tool_action or self.default_tool_action
+            self.tool_action = action()
         else:
             module, cls = action
             mod = __import__( module, globals(), locals(), [cls])

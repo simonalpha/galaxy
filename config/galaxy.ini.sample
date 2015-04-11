@@ -988,6 +988,15 @@ use_interactive = True
 # if running many handlers.
 #cache_user_job_count = False
 
+
+# Default Tool Action configuration
+# Set the default tool action for 'default' type tools. This allows custom
+# logic to be used during the execute/job instantiation process.
+# Defaults to "galaxy.tools.actions:DefaultToolAction", and can be set
+# individually by an <action> element in the tool configuration file, with
+# module and class attributes.
+#default_tool_action = galaxy.tools.actions:DefaultToolAction
+
 # ToolBox filtering
 
 # Modules from lib/galaxy/tools/toolbox/filters/ can be specified in

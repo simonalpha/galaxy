@@ -21,6 +21,10 @@ from galaxy.util.dbkeys import GenomeBuilds
 from galaxy.web.formatting import expand_pretty_datetime_format
 from .version import VERSION_MAJOR
 
+# for default tool action
+eggs.require("PasteDeploy")
+from paste.deploy.util import lookup_object
+
 log = logging.getLogger( __name__ )
 
 
@@ -90,6 +94,7 @@ class Configuration( object ):
         self.enable_quotas = string_as_bool( kwargs.get( 'enable_quotas', False ) )
         self.enable_unique_workflow_defaults = string_as_bool( kwargs.get( 'enable_unique_workflow_defaults', False ) )
         self.tool_path = resolve_path( kwargs.get( "tool_path", "tools" ), self.root )
+        self.default_tool_action = lookup_object_if_exists(kwargs.get( 'default_tool_action', None ))
         self.tool_data_path = resolve_path( kwargs.get( "tool_data_path", "tool-data" ), os.getcwd() )
         self.builds_file_path = resolve_path( kwargs.get( "builds_file_path", os.path.join( self.tool_data_path, 'shared', 'ucsc', 'builds.txt') ), self.root )
         self.len_file_path = resolve_path( kwargs.get( "len_file_path", os.path.join( self.tool_data_path, 'shared', 'ucsc', 'chrom') ), self.root )
@@ -712,6 +717,16 @@ def configure_logging( config ):
         sentry_handler.setLevel( logging.WARN )
         root.addHandler( sentry_handler )
 
+def lookup_object_if_exists(spec):
+    """
+    Given a string of the form "module.submodule..:Object", returns the object.
+    Proxies to the lookup_object function in PasteDeploy if spec is not None.
+    Otherwise returns None.
+    """
+    if spec is not None:
+        return lookup_object(spec)
+    else:
+        return None
 
 class ConfiguresGalaxyMixin:
     """ Shared code for configuring Galaxy-like app objects.
