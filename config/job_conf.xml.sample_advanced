@@ -5,6 +5,7 @@
              The default from <plugins> is used if not defined for a <plugin>.
           -->
         <plugin id="local" type="runner" load="galaxy.jobs.runners.local:LocalJobRunner"/>
+        <plugin id="sleeper" type="runner" load="galaxy.jobs.runners.faker:FakeJobRunner" workers="64"/>
         <plugin id="pbs" type="runner" load="galaxy.jobs.runners.pbs:PBSJobRunner" workers="2"/>
         <plugin id="drmaa" type="runner" load="galaxy.jobs.runners.drmaa:DRMAAJobRunner">
             <!-- Different DRMs handle successfully completed jobs differently,
@@ -256,6 +257,10 @@
             <param id="galaxy_external_runjob_script">scripts/drmaa_external_runner.py</param>
             <param id="galaxy_external_killjob_script">scripts/drmaa_external_killer.py</param>
             <param id="galaxy_external_chown_script">scripts/external_chown_script.py</param>
+        </destination>
+        <destination id="caching" runner="dynamic">
+            <param id="type">python</param>
+            <param id="function">cached_or_normal</param>
         </destination>
         <destination id="dynamic" runner="dynamic">
             <!-- A destination that represents a method in the dynamic runner. -->
